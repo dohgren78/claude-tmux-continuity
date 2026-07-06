@@ -1,0 +1,27 @@
+# --- Claude Code session continuity across reboot (TPM + resurrect + continuum) ---
+# Add these lines to ~/.tmux.conf. Requires tmux-resurrect + tmux-continuum (via TPM).
+
+set -g @plugin 'tmux-plugins/tpm'
+set -g @plugin 'tmux-plugins/tmux-resurrect'
+set -g @plugin 'tmux-plugins/tmux-continuum'
+
+# resurrect: also snapshot pane contents + remember nvim sessions
+set -g @resurrect-capture-pane-contents 'on'
+set -g @resurrect-strategy-nvim 'session'
+
+# continuum: auto-save every 15 min, auto-restore when the tmux server next starts
+set -g @continuum-save-interval '15'
+set -g @continuum-restore 'on'
+
+# Auto-start the tmux server at login (installs a macOS launchd agent). Without this
+# there's no server for continuum-restore to fire into after a reboot.
+set -g @continuum-boot 'on'
+
+# Claude Code session continuity: snapshot pane<->claude-session-id map on every
+# save, and re-launch `claude --resume <id>` in each pane after a reboot restore.
+set -g @resurrect-hook-post-save-all 'zsh $HOME/.claude/bin/tmux-claude-snapshot.sh >/dev/null 2>&1'
+set -g @resurrect-hook-post-restore-all 'zsh $HOME/.claude/bin/tmux-claude-restore.sh >/dev/null 2>&1'
+
+# Manual: prefix + C -> snapshot now. CLAUDE_SNAPSHOT_NOTIFY=1 fires a macOS
+# notification (terminal-notifier); the 15-min auto-saves stay silent.
+bind C run-shell 'CLAUDE_SNAPSHOT_NOTIFY=1 zsh $HOME/.claude/bin/tmux-claude-snapshot.sh'
