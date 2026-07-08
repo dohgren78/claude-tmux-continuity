@@ -6,6 +6,8 @@ comes back running `claude --resume <its own sessionId>`, not a bare shell.
 Companion to [claude-tmux-dashboard](https://github.com/dohgren78/claude-tmux-dashboard)
 (the live fzf overview of sessions). This repo is the reboot-survival half.
 
+![the companion claude-dash overview](https://raw.githubusercontent.com/dohgren78/claude-tmux-dashboard/main/demo.gif)
+
 ## The problem
 
 Running ~14 Claude Code sessions, one per tmux session, a reboot kills them all.
