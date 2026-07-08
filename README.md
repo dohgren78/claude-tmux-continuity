@@ -75,3 +75,7 @@ install the plugins (`prefix + I`), and optionally
 
 macOS-only (tty joins via `ps`, `terminal-notifier`). Requires Claude Code, tmux,
 tmux-resurrect, tmux-continuum.
+
+## License
+
+[MIT](./LICENSE) — no warranty, use at your own risk.
