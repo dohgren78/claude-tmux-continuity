@@ -41,6 +41,16 @@ continuum restores the layout -> post-restore hook fires -> each pane relaunches
 **Caveat:** the snapshot only refreshes on continuum's 15-min save (or `prefix + C`). A
 session started <15 min before a reboot may be missed unless you hit `prefix + C` first.
 
+**Limitation — daemon-hosted (background / agent) sessions:** Claude Code 2.1+ can split a
+session into a daemon-hosted background *job* and a thin interactive *client* that owns the
+tmux pane. The tty-join captures whichever session owns the pane. For ordinary foreground
+`claude` sessions (the usual case) that *is* the real conversation, so it resumes correctly.
+But when a pane is a client of a background/agent job, the captured `sessionId` is the
+client's — which can differ from the job's actual conversation — so `--resume` may reopen the
+client rather than the work. Plain interactive sessions are unaffected. (The companion
+[dashboard](https://github.com/dohgren78/claude-tmux-dashboard) resolves this by keying on the
+job id; continuity may follow — see issues.)
+
 ## Install
 
 ```sh

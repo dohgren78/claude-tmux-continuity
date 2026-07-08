@@ -5,6 +5,13 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$HOME/.claude/bin"
+
+# tmux is required; the automatic reboot flow also needs the TPM plugins.
+command -v tmux >/dev/null 2>&1 || { echo "missing dependency: tmux (install it first)" >&2; exit 1; }
+for p in tmux-resurrect tmux-continuum; do
+  [ -d "$HOME/.tmux/plugins/$p" ] || echo "note: $p not found under ~/.tmux/plugins — the automatic post-reboot restore won't fire until you add it via TPM (see step 1 below)." >&2
+done
+
 mkdir -p "$BIN"
 
 for s in tmux-claude-snapshot.sh tmux-claude-restore.sh; do

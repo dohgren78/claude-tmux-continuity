@@ -5,9 +5,11 @@
 # Intended to run from resurrect's @resurrect-hook-post-restore-all, or by hand.
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 TSV="$HOME/.claude/tmux-claude-sessions.tsv"
-CLAUDE="$HOME/.local/bin/claude"
+# Resolve the claude binary: $CLAUDE override -> PATH -> native-installer default.
+CLAUDE="${CLAUDE:-$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")}"
 LOG="$HOME/.claude/tmux-claude-restore.log"
 [ -f "$TSV" ] || { echo "no snapshot at $TSV"; exit 1; }
+[ -x "$CLAUDE" ] || { echo "claude not found at '$CLAUDE' — set \$CLAUDE or install Claude Code"; exit 1; }
 tmux start-server 2>/dev/null
 
 while IFS=$'\t' read -r sess win pane cwd sid; do
