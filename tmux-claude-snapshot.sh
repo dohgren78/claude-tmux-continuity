@@ -4,18 +4,21 @@
 # Output TSV: <tmux_session>\t<window>\t<pane>\t<cwd>\t<claude_session_id>
 # Run periodically (launchd) so the map is always current before any reboot.
 #
-# Ground truth is the LIVE PROCESS, not ~/.claude/sessions/*.json.
+# Ground truth is the LIVE PROCESS's OWN session json — validated by mtime.
 #
-# Those JSON files are named by pid and outlive the process that wrote them. When
-# the OS reuses a pid, a stale <pid>.json still resolves to a real tty, so the old
-# code mapped a live pane to a DEAD session's id. Restoring from that map silently
-# swaps a conversation for an unrelated one — observed 2026-07-10, when three panes
-# were resumed onto the wrong transcripts.
+# Two failure modes, pulling in opposite directions:
+#  - pid reuse: <pid>.json outlives its process; when the OS reuses the pid, the
+#    stale file maps a live pane to a DEAD session's id (observed 2026-07-10:
+#    three panes resumed onto the wrong transcripts). Argv looks safer here...
+#  - sessionId drift: ...but a resumed session can MINT A NEW sessionId, so argv
+#    (`--resume <old-uuid>`) goes stale while the json stays correct (observed
+#    2026-07-11: TSV pointed a live pane at its pre-resume conversation fork).
 #
-# So: walk panes -> find the claude process on that pane's tty -> take the session id
-# out of its argv (`--resume <uuid>` / `--session-id <uuid>`). Only when argv carries
-# no id (a plain `claude`, i.e. a brand-new session) do we consult <pid>.json, and then
-# only the file belonging to that exact live pid. A stale json can never win.
+# The rule that survives both: trust <pid>.json IFF its mtime >= the process's
+# start time. A live claude rewrites its json continuously (busy/idle flips), so
+# a fresh mtime proves the file belongs to THIS process; a dead predecessor's
+# json can never be newer than the reused pid's start. Argv is only a fallback
+# for the brief window before a brand-new session first writes its json.
 OUT="$HOME/.claude/tmux-claude-sessions.tsv"
 SESSDIR="$HOME/.claude/sessions"
 TMP="$(mktemp)"
@@ -40,20 +43,29 @@ while read -r pid tty cmd; do
   [ -n "${CLAUDE_PID[$tty]}" ] || CLAUDE_PID[$tty]="$pid"   # lowest pid on the tty wins
 done < <(ps -eo pid=,tty=,command= | sort -n)
 
-# sid_of <pid> — argv first, then that pid's own session json.
+# sid_of <pid> — the pid's own session json when provably live (mtime >= proc
+# start), else argv. Json first because a resumed session can mint a new
+# sessionId, leaving argv's `--resume <uuid>` pointing at the old conversation.
 sid_of() {
-  local pid="$1" argv sid f jpid jsid
+  local pid="$1" argv sid f jpid jsid jm ps_start
+  f="$SESSDIR/$pid.json"
+  if [ -f "$f" ]; then
+    jpid=$(/usr/bin/sed -n 's/.*"pid":\([0-9]*\).*/\1/p' "$f")
+    jsid=$(/usr/bin/sed -n 's/.*"sessionId":"\([^"]*\)".*/\1/p' "$f")
+    if [ "$jpid" = "$pid" ] && [ -n "$jsid" ]; then
+      jm=$(/usr/bin/stat -f %m "$f" 2>/dev/null)
+      ps_start=$(LC_ALL=C ps -o lstart= -p "$pid" 2>/dev/null)
+      ps_start=$(LC_ALL=C /bin/date -j -f "%a %b %d %T %Y" "${ps_start## }" +%s 2>/dev/null)
+      # json written during THIS process's lifetime -> it is this process's json
+      if [ -n "$jm" ] && [ -n "$ps_start" ] && [ "$jm" -ge "$ps_start" ]; then
+        print -r -- "$jsid"; return 0
+      fi
+    fi
+  fi
   argv=$(ps -o command= -p "$pid" 2>/dev/null)
   sid=$(print -r -- "$argv" | grep -oE "(--resume|--session-id)[= ]+$UUID" | grep -oE "$UUID" | head -1)
-  if [ -n "$sid" ]; then print -r -- "$sid"; return 0; fi
-
-  f="$SESSDIR/$pid.json"
-  [ -f "$f" ] || return 1
-  jpid=$(/usr/bin/sed -n 's/.*"pid":\([0-9]*\).*/\1/p' "$f")
-  jsid=$(/usr/bin/sed -n 's/.*"sessionId":"\([^"]*\)".*/\1/p' "$f")
-  [ "$jpid" = "$pid" ] || return 1      # stale file: pid was reused
-  [ -n "$jsid" ] || return 1
-  print -r -- "$jsid"
+  [ -n "$sid" ] || return 1
+  print -r -- "$sid"
 }
 
 MISSING=0
